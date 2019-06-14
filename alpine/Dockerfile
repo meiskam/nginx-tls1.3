@@ -1,4 +1,4 @@
-FROM alpine:3.8
+FROM jlesage/baseimage:alpine-3.8-v2.4.2
 
 LABEL maintainer="khs1994.com nginx With TLSv1.3"
 
