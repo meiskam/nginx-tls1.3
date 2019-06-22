@@ -135,6 +135,11 @@ RUN set -x ; apk add --no-cache git \
 	&& apk add --no-cache --virtual .gettext gettext \
 	&& mv /usr/bin/envsubst /tmp/ \
 	\
+	&& cd /srv/openssl \
+	&& ./config no-shared no-threads 'enable-tls1_3' \
+	&& make -j$(getconf _NPROCESSORS_ONLN) \
+	&& make install \
+	\
 	&& runDeps="$( \
 		scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/lib/nginx/modules/*.so /tmp/envsubst \
 			| tr ',' '\n' \
@@ -151,17 +156,8 @@ RUN set -x ; apk add --no-cache git \
 	# variables
 	&& apk add --no-cache tzdata \
 	\
-	# forward request and error logs to docker log collector
-	&& ln -sf /dev/stdout /var/log/nginx/access.log \
-	&& ln -sf /dev/stderr /var/log/nginx/error.log \
   && rm -rf /srv/openssl
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY nginx.vh.default.conf /etc/nginx/conf.d/default.conf
 COPY index.html /etc/nginx/html/
-
-EXPOSE 80
-
-STOPSIGNAL SIGTERM
-
-CMD ["nginx", "-g", "daemon off;"]
