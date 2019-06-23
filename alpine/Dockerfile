@@ -1,4 +1,4 @@
-FROM alpine:3.8
+FROM jlesage/baseimage:alpine-3.8-v2.4.2
 
 LABEL maintainer="khs1994.com nginx With TLSv1.3"
 
@@ -19,21 +19,19 @@ RUN set -x ; apk add --no-cache git \
      && sed -i "s/dl-cdn.alpinelinux.org/${ALPINE_URL}/g" /etc/apk/repositories \
      && GPG_KEYS=B0F4253373F8F6F510D42178520A9993A1C052F8 \
 	   && CONFIG="\
-    --with-openssl=/srv/openssl \
-    --with-openssl-opt='enable-tls1_3' \
+		--with-openssl=/srv/openssl \
+		--with-openssl-opt='enable-tls1_3' \
 		--prefix=/etc/nginx \
 		--sbin-path=/usr/sbin/nginx \
 		--modules-path=/usr/lib/nginx/modules \
 		--conf-path=/etc/nginx/nginx.conf \
-		--error-log-path=/var/log/nginx/error.log \
-		--http-log-path=/var/log/nginx/access.log \
-		--pid-path=/var/run/nginx.pid \
-		--lock-path=/var/run/nginx.lock \
-		--http-client-body-temp-path=/var/cache/nginx/client_temp \
-		--http-proxy-temp-path=/var/cache/nginx/proxy_temp \
-		--http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
-		--http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
-		--http-scgi-temp-path=/var/cache/nginx/scgi_temp \
+		--pid-path=/run/nginx/nginx.pid \
+		--lock-path=/run/nginx/nginx.lock \
+		--http-client-body-temp-path=/var/tmp/nginx/client_body \
+		--http-proxy-temp-path=/var/tmp/nginx/proxy \
+		--http-fastcgi-temp-path=/var/tmp/nginx/fastcgi \
+		--http-uwsgi-temp-path=/var/tmp/nginx/uwsgi \
+		--http-scgi-temp-path=/var/tmp/nginx/scgi \
 		--user=nginx \
 		--group=nginx \
 		--with-http_ssl_module \
@@ -53,7 +51,7 @@ RUN set -x ; apk add --no-cache git \
 		--with-http_image_filter_module=dynamic \
 		--with-http_geoip_module=dynamic \
 		--with-threads \
-		--with-stream \
+		--with-stream=dynamic \
 		--with-stream_ssl_module \
 		--with-stream_ssl_preread_module \
 		--with-stream_realip_module \
@@ -64,7 +62,7 @@ RUN set -x ; apk add --no-cache git \
 		--with-compat \
 		--with-file-aio \
 		--with-http_v2_module \
-    --with-http_v2_hpack_enc \
+		--with-http_v2_hpack_enc \
 	" \
 	&& addgroup -S nginx \
 	&& adduser -D -S -h /var/cache/nginx -s /sbin/nologin -G nginx nginx \
@@ -113,6 +111,7 @@ RUN set -x ; apk add --no-cache git \
 	&& mv objs/ngx_http_image_filter_module.so objs/ngx_http_image_filter_module-debug.so \
 	&& mv objs/ngx_http_geoip_module.so objs/ngx_http_geoip_module-debug.so \
 	&& mv objs/ngx_stream_geoip_module.so objs/ngx_stream_geoip_module-debug.so \
+	&& mv objs/ngx_stream_module.so objs/ngx_stream_module-debug.so \
 	&& ./configure $CONFIG \
 	&& make -j$(getconf _NPROCESSORS_ONLN) \
 	&& make install \
@@ -124,10 +123,19 @@ RUN set -x ; apk add --no-cache git \
 	&& install -m755 objs/ngx_http_image_filter_module-debug.so /usr/lib/nginx/modules/ngx_http_image_filter_module-debug.so \
 	&& install -m755 objs/ngx_http_geoip_module-debug.so /usr/lib/nginx/modules/ngx_http_geoip_module-debug.so \
 	&& install -m755 objs/ngx_stream_geoip_module-debug.so /usr/lib/nginx/modules/ngx_stream_geoip_module-debug.so \
+	&& install -m755 objs/ngx_stream_module-debug.so /usr/lib/nginx/modules/ngx_stream_module-debug.so \
 	&& ln -s /usr/lib/nginx/modules /etc/nginx/modules \
 	&& strip /usr/sbin/nginx* \
 	&& strip /usr/lib/nginx/modules/*.so \
 	&& rm -rf /usr/src/nginx-$NGINX_VERSION \
+	\
+	&& cd /srv/openssl \
+	&& make clean \
+	&& ./config no-shared no-threads 'enable-tls1_3' \
+	&& make -j$(getconf _NPROCESSORS_ONLN) \
+	&& rm -r /srv/openssl/doc/ \
+	&& make install \
+	\
 	# Bring in gettext so we can get `envsubst`, then throw
 	# the rest away. To do this, we need to install `gettext`
 	# then move `envsubst` out of the way so `gettext` can
@@ -151,17 +159,8 @@ RUN set -x ; apk add --no-cache git \
 	# variables
 	&& apk add --no-cache tzdata \
 	\
-	# forward request and error logs to docker log collector
-	&& ln -sf /dev/stdout /var/log/nginx/access.log \
-	&& ln -sf /dev/stderr /var/log/nginx/error.log \
   && rm -rf /srv/openssl
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY nginx.vh.default.conf /etc/nginx/conf.d/default.conf
 COPY index.html /etc/nginx/html/
-
-EXPOSE 80
-
-STOPSIGNAL SIGTERM
-
-CMD ["nginx", "-g", "daemon off;"]
