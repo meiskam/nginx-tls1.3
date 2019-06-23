@@ -128,17 +128,19 @@ RUN set -x ; apk add --no-cache git \
 	&& strip /usr/sbin/nginx* \
 	&& strip /usr/lib/nginx/modules/*.so \
 	&& rm -rf /usr/src/nginx-$NGINX_VERSION \
+	\
+	&& cd /srv/openssl \
+	&& make clean \
+	&& ./config no-shared no-threads 'enable-tls1_3' \
+	&& make -j$(getconf _NPROCESSORS_ONLN) \
+	&& make install \
+	\
 	# Bring in gettext so we can get `envsubst`, then throw
 	# the rest away. To do this, we need to install `gettext`
 	# then move `envsubst` out of the way so `gettext` can
 	# be deleted completely, then move `envsubst` back.
 	&& apk add --no-cache --virtual .gettext gettext \
 	&& mv /usr/bin/envsubst /tmp/ \
-	\
-	&& cd /srv/openssl \
-	&& ./config no-shared no-threads 'enable-tls1_3' \
-	&& make -j$(getconf _NPROCESSORS_ONLN) \
-	&& make install \
 	\
 	&& runDeps="$( \
 		scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/lib/nginx/modules/*.so /tmp/envsubst \
